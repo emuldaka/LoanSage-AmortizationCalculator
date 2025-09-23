@@ -12,6 +12,7 @@ export interface ModificationPeriod {
   startMonth: number;
   endMonth: number;
   amount: number;
+  paymentDate?: Date; // For form use, not calculation
 }
 
 export interface LoanData {

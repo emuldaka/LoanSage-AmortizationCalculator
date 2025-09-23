@@ -35,7 +35,7 @@ export default function Home() {
           if (parsed.modificationPeriods) {
             parsed.modificationPeriods = parsed.modificationPeriods.map((mod: any) => ({
               ...mod,
-              paymentDate: new Date(mod.paymentDate),
+              paymentDate: mod.paymentDate ? new Date(mod.paymentDate) : undefined,
             }));
           }
           setLoanData(parsed);

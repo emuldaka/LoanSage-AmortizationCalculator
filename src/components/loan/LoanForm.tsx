@@ -11,7 +11,7 @@ import {
   Calendar as CalendarIcon,
 } from 'lucide-react';
 import { useEffect } from 'react';
-import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
+import { differenceInCalendarMonths, format, addMonths, isValid } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -110,10 +110,10 @@ export default function LoanForm({
         const dataForForm: any = {
           ...initialData,
           startDate: initialData.startDate ? new Date(initialData.startDate) : new Date(),
-          modificationPeriods: (initialData.modificationPeriods || []).map(mod => {
-            const paymentDate = addMonths(new Date(initialData.startDate || new Date()), mod.startMonth - 1);
-            return { ...mod, paymentDate };
-          }),
+           modificationPeriods: (initialData.modificationPeriods || []).map(mod => ({
+            ...mod,
+            paymentDate: new Date(mod.paymentDate),
+          })),
         };
 
         form.reset(dataForForm);
@@ -131,21 +131,28 @@ export default function LoanForm({
   function onSubmit(values: z.infer<typeof formSchema>) {
     const loanStartDate = values.startDate || new Date();
     
-    // This function is called when the user hits "Calculate".
-    // It should convert the form's modificationPeriods ({paymentDate, amount})
-    // to the format needed for calculation and storage ({startMonth, endMonth, amount}).
-    const modificationPeriodsForCalc: ModificationPeriod[] = (values.modificationPeriods || []).map(p => {
-        const month = differenceInCalendarMonths(new Date(p.paymentDate), loanStartDate) + 1;
-        return { startMonth: month, endMonth: month, amount: p.amount };
-    }).filter(p => p.startMonth > 0);
-
     // This is the data that will be saved to localStorage.
     const loanDataForStorage: LoanData = {
-      ...values,
-      modificationPeriods: modificationPeriodsForCalc,
+        ...values,
+        modificationPeriods: (values.modificationPeriods || []).map(p => ({
+            ...p,
+            // Convert date to a format that can be stored and retrieved for calculation
+            startMonth: differenceInCalendarMonths(new Date(p.paymentDate), loanStartDate) + 1,
+            endMonth: differenceInCalendarMonths(new Date(p.paymentDate), loanStartDate) + 1
+        }))
     };
     
-    const schedule = calculateAmortizationSchedule(loanDataForStorage);
+    // We only want to store the calculation-relevant parts, not the raw form date
+    const modificationPeriodsForCalc = loanDataForStorage.modificationPeriods.map(({startMonth, endMonth, amount}) => ({
+        startMonth, endMonth, amount
+    })).filter(p => p.startMonth > 0);
+
+
+    const schedule = calculateAmortizationSchedule({
+      ...loanDataForStorage,
+      modificationPeriods: modificationPeriodsForCalc
+    });
+
     if (schedule.length > 0) {
       onCalculate(loanDataForStorage, schedule);
       toast({
@@ -348,7 +355,9 @@ export default function LoanForm({
                  <FormDescription>
                   Specify additional one-time payments.
                 </FormDescription>
-                {fields.map((field, index) => (
+                {fields.map((field, index) => {
+                  const dateValue = form.watch(`modificationPeriods.${index}.paymentDate`);
+                  return (
                   <div
                     key={field.id}
                     className="flex flex-col gap-4 rounded-lg border p-4 md:flex-row md:items-end"
@@ -366,12 +375,12 @@ export default function LoanForm({
                                   variant={'outline'}
                                   className={cn(
                                     'w-full justify-start text-left font-normal',
-                                    !field.value && 'text-muted-foreground'
+                                    !dateValue && 'text-muted-foreground'
                                   )}
                                 >
                                   <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {field.value ? (
-                                    format(new Date(field.value), 'PPP')
+                                  {dateValue && isValid(new Date(dateValue)) ? (
+                                    format(new Date(dateValue), 'PPP')
                                   ) : (
                                     <span>Pick a date</span>
                                   )}
@@ -414,7 +423,7 @@ export default function LoanForm({
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
-                ))}
+                )})}
 
                 <Button
                   type="button"
