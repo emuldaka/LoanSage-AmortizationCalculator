@@ -110,17 +110,11 @@ export default function LoanForm({
         const dataForForm: any = {
           ...initialData,
           startDate: initialData.startDate ? new Date(initialData.startDate) : new Date(),
+          modificationPeriods: (initialData.modificationPeriods || []).map(mod => {
+            const paymentDate = addMonths(new Date(initialData.startDate || new Date()), mod.startMonth - 1);
+            return { ...mod, paymentDate };
+          }),
         };
-        
-        // When loading from localStorage, the modificationPeriods are in {startMonth, endMonth, amount} format.
-        // We need to convert them back to {paymentDate, amount} for the form.
-        if (initialData.modificationPeriods) {
-           const loanStartDate = dataForForm.startDate;
-           dataForForm.modificationPeriods = (initialData.modificationPeriods || []).map(mod => {
-              const paymentDate = addMonths(loanStartDate, mod.startMonth - 1);
-              return { paymentDate, amount: mod.amount };
-           });
-        }
 
         form.reset(dataForForm);
       } else {
@@ -141,7 +135,7 @@ export default function LoanForm({
     // It should convert the form's modificationPeriods ({paymentDate, amount})
     // to the format needed for calculation and storage ({startMonth, endMonth, amount}).
     const modificationPeriodsForCalc: ModificationPeriod[] = (values.modificationPeriods || []).map(p => {
-        const month = differenceInCalendarMonths(p.paymentDate, loanStartDate) + 1;
+        const month = differenceInCalendarMonths(new Date(p.paymentDate), loanStartDate) + 1;
         return { startMonth: month, endMonth: month, amount: p.amount };
     }).filter(p => p.startMonth > 0);
 
@@ -376,8 +370,8 @@ export default function LoanForm({
                                   )}
                                 >
                                   <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {field.value && field.value instanceof Date ? (
-                                    format(field.value, 'PPP')
+                                  {field.value ? (
+                                    format(new Date(field.value), 'PPP')
                                   ) : (
                                     <span>Pick a date</span>
                                   )}
