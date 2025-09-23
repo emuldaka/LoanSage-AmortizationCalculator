@@ -11,7 +11,7 @@ import {
   Calendar as CalendarIcon,
 } from 'lucide-react';
 import { useEffect } from 'react';
-import { differenceInCalendarMonths, format } from 'date-fns';
+import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -102,33 +102,23 @@ export default function LoanForm({
 
   useEffect(() => {
     if (initialData) {
-      const dataForForm = {
+      // Create a mutable copy to work with
+      const dataForForm: any = {
         ...initialData,
-        startDate: initialData.startDate ? new Date(initialData.startDate) : undefined,
-        // The form needs modificationPeriods with paymentDate, not start/end month
-        modificationPeriods: (initialData as any).modificationPeriods?.map((p: any) => ({
-            amount: p.amount,
-            // This is a bit of a hack, we don't store the original date
-            // The logic in onSubmit re-calculates the month diff
-            paymentDate: new Date(), 
-        })) || [],
+        startDate: initialData.startDate ? new Date(initialData.startDate) : new Date(),
       };
       
+      // When loading from localStorage, the modificationPeriods are in {startMonth, endMonth, amount} format.
+      // We need to convert them back to {paymentDate, amount} for the form.
       if (initialData.modificationPeriods) {
-        // This is tricky because the form uses paymentDate and the stored data uses months.
-        // For simplicity, when loading data, we won't perfectly reconstruct the one-time payment dates.
-        // We will just load the amounts. The user can re-enter dates if needed.
-        // A more robust solution would require storing the date in the modificationPeriod.
-         const loanStartDate = initialData.startDate || new Date();
+         const loanStartDate = dataForForm.startDate;
          dataForForm.modificationPeriods = (initialData.modificationPeriods || []).map(mod => {
-            // This part is imperfect as we don't have the original day, just the month.
-            // This part is also complex because `addMonths` is not available here easily.
-            // We'll reset the dates for now when loading from history.
-            return { paymentDate: new Date(), amount: mod.amount };
+            const paymentDate = addMonths(loanStartDate, mod.startMonth - 1);
+            return { paymentDate, amount: mod.amount };
          });
       }
 
-      form.reset(initialData);
+      form.reset(dataForForm);
     } else {
       form.reset(defaultValues);
     }
@@ -142,19 +132,23 @@ export default function LoanForm({
   function onSubmit(values: z.infer<typeof formSchema>) {
     const loanStartDate = values.startDate || new Date();
     
-    const modificationPeriods: ModificationPeriod[] = (values.modificationPeriods || []).map(p => {
+    // This function is called when the user hits "Calculate".
+    // It should convert the form's modificationPeriods ({paymentDate, amount})
+    // to the format needed for calculation and storage ({startMonth, endMonth, amount}).
+    const modificationPeriodsForCalc: ModificationPeriod[] = (values.modificationPeriods || []).map(p => {
         const month = differenceInCalendarMonths(p.paymentDate, loanStartDate) + 1;
         return { startMonth: month, endMonth: month, amount: p.amount };
     }).filter(p => p.startMonth > 0);
 
-    const loanData: LoanData = {
+    // This is the data that will be saved to localStorage.
+    const loanDataForStorage: LoanData = {
       ...values,
-      modificationPeriods,
+      modificationPeriods: modificationPeriodsForCalc,
     };
-
-    const schedule = calculateAmortizationSchedule(loanData);
+    
+    const schedule = calculateAmortizationSchedule(loanDataForStorage);
     if (schedule.length > 0) {
-      onCalculate(values, schedule);
+      onCalculate(loanDataForStorage, schedule);
       toast({
         title: 'Calculation Complete',
         description: 'Your amortization schedule has been generated.',
