@@ -5,7 +5,6 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import * as z from 'zod';
 import {
   Calculator,
-  Lightbulb,
   Plus,
   Trash2,
   RefreshCw,
@@ -36,14 +35,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { calculateAmortizationSchedule } from '@/lib/amortization';
 import type { AmortizationPeriod, LoanData, ModificationPeriod } from '@/lib/types';
-import { suggestOptimalPaymentSchedule } from '@/ai/flows/suggest-optimal-payment-schedule';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
@@ -91,8 +83,6 @@ export default function LoanForm({
   hasResults,
 }: LoanFormProps) {
   const { toast } = useToast();
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -140,49 +130,6 @@ export default function LoanForm({
       });
     }
   }
-
-  const handleAiSuggest = async () => {
-    const values = form.getValues();
-    const validation = formSchema.safeParse(values);
-    if (!validation.success) {
-      toast({
-        variant: 'destructive',
-        title: 'Invalid Input',
-        description: 'Please fix the errors in the form before suggesting a schedule.',
-      });
-      // Trigger validation display
-      form.trigger();
-      return;
-    }
-
-    setIsAiLoading(true);
-    try {
-      const loanStartDate = values.startDate || new Date();
-      const modificationPeriods: ModificationPeriod[] = (values.modificationPeriods || []).map(p => {
-        const month = differenceInCalendarMonths(p.paymentDate, loanStartDate) + 1;
-        return { startMonth: month, endMonth: month, amount: p.amount };
-      }).filter(p => p.startMonth > 0);
-
-      const result = await suggestOptimalPaymentSchedule({
-        principal: values.principal,
-        interestRate: values.interestRate / 100,
-        loanTermMonths: values.termInYears * 12,
-        extraPaymentAmount: values.extraPayment,
-        paymentModificationPeriods: modificationPeriods,
-      });
-      setAiSuggestion(result.suggestedPaymentSchedule);
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: 'destructive',
-        title: 'AI Suggestion Failed',
-        description:
-          'There was an error getting a suggestion. Please try again.',
-      });
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
 
   const handleResetForm = () => {
     form.reset();
@@ -304,13 +251,6 @@ export default function LoanForm({
               </div>
 
               <Separator />
-
-              <div>
-                <h3 className="text-lg font-medium">Extra Payments</h3>
-                <p className="text-sm text-muted-foreground">
-                  Adding extra payments can help you pay off your loan faster and save on interest.
-                </p>
-              </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                  <FormField
@@ -434,10 +374,6 @@ export default function LoanForm({
                     Reset
                   </Button>
                 )}
-                <Button type="button" variant="secondary" onClick={handleAiSuggest} disabled={isAiLoading}>
-                  <Lightbulb />
-                  {isAiLoading ? 'Thinking...' : 'AI Suggest Optimal Schedule'}
-                </Button>
                 <Button type="submit">
                   <Calculator />
                   Calculate Schedule
@@ -447,24 +383,6 @@ export default function LoanForm({
           </Form>
         </CardContent>
       </Card>
-      <Dialog open={!!aiSuggestion} onOpenChange={() => setAiSuggestion(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className='flex items-center gap-2'>
-              <Lightbulb />
-              AI-Suggested Payment Schedule
-            </DialogTitle>
-            <DialogDescription>
-              Here is an optimized payment strategy to reduce your loan term and interest paid.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto rounded-md bg-muted p-4">
-            <pre className="whitespace-pre-wrap text-sm text-muted-foreground">
-              {aiSuggestion}
-            </pre>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
