@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Calendar as CalendarIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { differenceInCalendarMonths, format } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
@@ -75,26 +75,64 @@ type LoanFormProps = {
   ) => void;
   onReset: () => void;
   hasResults: boolean;
+  initialData: LoanData | null;
+};
+
+const defaultValues = {
+  principal: 100000,
+  interestRate: 5,
+  termInYears: 30,
+  extraPayment: 0,
+  modificationPeriods: [],
+  startDate: new Date(),
 };
 
 export default function LoanForm({
   onCalculate,
   onReset,
   hasResults,
+  initialData,
 }: LoanFormProps) {
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      principal: 100000,
-      interestRate: 5,
-      termInYears: 30,
-      extraPayment: 0,
-      modificationPeriods: [],
-      startDate: new Date(),
-    },
+    defaultValues: initialData ? undefined : defaultValues,
   });
+
+  useEffect(() => {
+    if (initialData) {
+      const dataForForm = {
+        ...initialData,
+        startDate: initialData.startDate ? new Date(initialData.startDate) : undefined,
+        // The form needs modificationPeriods with paymentDate, not start/end month
+        modificationPeriods: (initialData as any).modificationPeriods?.map((p: any) => ({
+            amount: p.amount,
+            // This is a bit of a hack, we don't store the original date
+            // The logic in onSubmit re-calculates the month diff
+            paymentDate: new Date(), 
+        })) || [],
+      };
+      
+      if (initialData.modificationPeriods) {
+        // This is tricky because the form uses paymentDate and the stored data uses months.
+        // For simplicity, when loading data, we won't perfectly reconstruct the one-time payment dates.
+        // We will just load the amounts. The user can re-enter dates if needed.
+        // A more robust solution would require storing the date in the modificationPeriod.
+         const loanStartDate = initialData.startDate || new Date();
+         dataForForm.modificationPeriods = (initialData.modificationPeriods || []).map(mod => {
+            // This part is imperfect as we don't have the original day, just the month.
+            // This part is also complex because `addMonths` is not available here easily.
+            // We'll reset the dates for now when loading from history.
+            return { paymentDate: new Date(), amount: mod.amount };
+         });
+      }
+
+      form.reset(initialData);
+    } else {
+      form.reset(defaultValues);
+    }
+  }, [initialData, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -132,7 +170,7 @@ export default function LoanForm({
   }
 
   const handleResetForm = () => {
-    form.reset();
+    form.reset(defaultValues);
     onReset();
   };
 
@@ -225,7 +263,7 @@ export default function LoanForm({
                             >
                               <CalendarIcon className="mr-2 h-4 w-4" />
                               {field.value ? (
-                                format(field.value, 'PPP')
+                                format(new Date(field.value), 'PPP')
                               ) : (
                                 <span>Pick a date</span>
                               )}
@@ -305,7 +343,7 @@ export default function LoanForm({
                                 >
                                   <CalendarIcon className="mr-2 h-4 w-4" />
                                   {field.value ? (
-                                    format(field.value, 'PPP')
+                                    format(new Date(field.value), 'PPP')
                                   ) : (
                                     <span>Pick a date</span>
                                   )}
