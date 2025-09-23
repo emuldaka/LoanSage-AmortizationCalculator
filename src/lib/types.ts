@@ -18,6 +18,9 @@ export interface LoanData {
   principal: number;
   interestRate: number; // annual percentage
   termInYears: number;
+  startDate?: Date;
   extraPayment?: number;
   modificationPeriods?: ModificationPeriod[];
 }
+
+    

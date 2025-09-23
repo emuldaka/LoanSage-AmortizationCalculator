@@ -22,12 +22,13 @@ export default function AmortizationSummary({
   const totalPrincipal = loanData.principal;
   const totalInterest = lastPayment.totalInterest;
   const totalPayments = totalPrincipal + totalInterest;
-  const payoffDate = addMonths(new Date(), lastPayment.month);
+  const startDate = loanData.startDate ? new Date(loanData.startDate) : new Date();
+  const payoffDate = addMonths(startDate, lastPayment.month);
   const totalMonths = lastPayment.month;
   const originalTermMonths = loanData.termInYears * 12;
 
   const summaryItems = [
-    { label: 'Monthly Payment', value: formatCurrency(schedule[0].payment) },
+    { label: 'Regular Monthly Payment', value: formatCurrency(schedule[0].payment - schedule[0].extraPayment) },
     { label: 'Total Principal', value: formatCurrency(totalPrincipal) },
     { label: 'Total Interest', value: formatCurrency(totalInterest) },
     { label: 'Total Payments', value: formatCurrency(totalPayments) },
@@ -72,7 +73,7 @@ export default function AmortizationSummary({
             </div>
              <div className="rounded-lg p-4">
                 <p className="text-sm text-muted-foreground">Original Payoff</p>
-                <p className="text-xl font-semibold">{format(addMonths(new Date(), originalTermMonths), 'MMMM yyyy')}</p>
+                <p className="text-xl font-semibold">{format(addMonths(startDate, originalTermMonths), 'MMMM yyyy')}</p>
             </div>
           </CardContent>
         </Card>
@@ -81,3 +82,5 @@ export default function AmortizationSummary({
     </div>
   );
 }
+
+    

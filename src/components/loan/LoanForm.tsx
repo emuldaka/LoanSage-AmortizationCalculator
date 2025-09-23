@@ -9,8 +9,10 @@ import {
   Plus,
   Trash2,
   RefreshCw,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import { format } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -42,6 +44,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 
 const modificationPeriodSchema = z.object({
   startMonth: z.coerce
@@ -66,6 +71,7 @@ const formSchema = z
     termInYears: z.coerce
       .number({ invalid_type_error: 'Please enter a valid term' })
       .positive('Term must be a positive number'),
+    startDate: z.date().optional(),
     extraPayment: z.coerce
       .number({ invalid_type_error: 'Please enter a valid amount' })
       .min(0, 'Extra payment cannot be negative')
@@ -194,7 +200,7 @@ export default function LoanForm({
               onSubmit={form.handleSubmit(onSubmit)}
               className="space-y-8"
             >
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
                 <FormField
                   control={form.control}
                   name="principal"
@@ -247,14 +253,55 @@ export default function LoanForm({
                     </FormItem>
                   )}
                 />
+                 <FormField
+                  control={form.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col pt-2">
+                      <FormLabel>Loan Start Date (Optional)</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={'outline'}
+                              className={cn(
+                                'w-full justify-start text-left font-normal',
+                                !field.value && 'text-muted-foreground'
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {field.value ? (
+                                format(field.value, 'PPP')
+                              ) : (
+                                <span>Pick a date</span>
+                              )}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                              date > new Date() || date < new Date('1900-01-01')
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
               <Separator />
 
               <div>
-                <h3 className="text-lg font-medium">Accelerated Payments</h3>
+                <h3 className="text-lg font-medium">Extra Payments</h3>
                 <p className="text-sm text-muted-foreground">
-                  Optionally add extra payments to pay off your loan faster.
+                  Adding extra payments can help you pay off your loan faster and save on interest.
                 </p>
               </div>
 
@@ -264,7 +311,7 @@ export default function LoanForm({
                   name="extraPayment"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Extra Monthly Payment ($)</FormLabel>
+                      <FormLabel>Recurring Extra Monthly Payment ($)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -275,7 +322,7 @@ export default function LoanForm({
                         />
                       </FormControl>
                       <FormDescription>
-                        Applied to every payment.
+                        This amount will be added to every monthly payment.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -284,7 +331,10 @@ export default function LoanForm({
               </div>
 
               <div className="space-y-4">
-                <FormLabel>Specific Period Modifications</FormLabel>
+                <FormLabel>One-Time or Temporary Extra Payments</FormLabel>
+                 <FormDescription>
+                  Specify additional payments for particular periods. For a one-time payment, set the start and end month to be the same.
+                </FormDescription>
                 {fields.map((field, index) => (
                   <div
                     key={field.id}
@@ -346,11 +396,11 @@ export default function LoanForm({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    append({ startMonth: 1, endMonth: 12, amount: 100 })
+                    append({ startMonth: 1, endMonth: 1, amount: 1000 })
                   }
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  Add Modification Period
+                  Add One-Time/Temporary Payment
                 </Button>
               </div>
 
@@ -399,3 +449,5 @@ export default function LoanForm({
     </>
   );
 }
+
+    
