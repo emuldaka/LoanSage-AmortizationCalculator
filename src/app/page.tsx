@@ -10,47 +10,63 @@ const LOAN_DATA_KEY = 'loanSageData';
 const SCHEDULE_KEY = 'loanSageSchedule';
 
 export default function Home() {
-  const [schedule, setSchedule] = useState<AmortizationPeriod[] | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const saved = localStorage.getItem(SCHEDULE_KEY);
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const [loanData, setLoanData] = useState<LoanData | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const saved = localStorage.getItem(LOAN_DATA_KEY);
-    if (!saved) return null;
-    const parsed = JSON.parse(saved);
-    // Dates need to be reconstructed
-    if (parsed.startDate) {
-      parsed.startDate = new Date(parsed.startDate);
-    }
-    if (parsed.modificationPeriods) {
-      parsed.modificationPeriods = parsed.modificationPeriods.map((mod: any) => ({
-        ...mod,
-        paymentDate: new Date(mod.paymentDate),
-      }));
-    }
-    return parsed;
-  });
+  const [schedule, setSchedule] = useState<AmortizationPeriod[] | null>(null);
+  const [loanData, setLoanData] = useState<LoanData | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (schedule) {
-      localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedule));
-    } else {
-      localStorage.removeItem(SCHEDULE_KEY);
-    }
-  }, [schedule]);
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (loanData) {
-      localStorage.setItem(LOAN_DATA_KEY, JSON.stringify(loanData));
-    } else {
-      localStorage.removeItem(LOAN_DATA_KEY);
+    if (isClient) {
+      try {
+        const savedSchedule = localStorage.getItem(SCHEDULE_KEY);
+        if (savedSchedule) {
+          setSchedule(JSON.parse(savedSchedule));
+        }
+
+        const savedLoanData = localStorage.getItem(LOAN_DATA_KEY);
+        if (savedLoanData) {
+          const parsed = JSON.parse(savedLoanData);
+          if (parsed.startDate) {
+            parsed.startDate = new Date(parsed.startDate);
+          }
+          if (parsed.modificationPeriods) {
+            parsed.modificationPeriods = parsed.modificationPeriods.map((mod: any) => ({
+              ...mod,
+              paymentDate: new Date(mod.paymentDate),
+            }));
+          }
+          setLoanData(parsed);
+        }
+      } catch (error) {
+        console.error("Failed to parse data from localStorage", error);
+        localStorage.removeItem(SCHEDULE_KEY);
+        localStorage.removeItem(LOAN_DATA_KEY);
+      }
     }
-  }, [loanData]);
+  }, [isClient]);
+
+  useEffect(() => {
+    if (isClient) {
+      if (schedule) {
+        localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedule));
+      } else {
+        localStorage.removeItem(SCHEDULE_KEY);
+      }
+    }
+  }, [schedule, isClient]);
+
+  useEffect(() => {
+    if (isClient) {
+      if (loanData) {
+        localStorage.setItem(LOAN_DATA_KEY, JSON.stringify(loanData));
+      } else {
+        localStorage.removeItem(LOAN_DATA_KEY);
+      }
+    }
+  }, [loanData, isClient]);
 
   const handleCalculate = (
     data: LoanData,
@@ -75,6 +91,7 @@ export default function Home() {
             onReset={handleReset}
             hasResults={!!schedule}
             initialData={loanData}
+            isClient={isClient}
           />
         </div>
         {schedule && loanData && (

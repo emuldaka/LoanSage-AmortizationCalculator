@@ -39,6 +39,7 @@ import type { AmortizationPeriod, LoanData, ModificationPeriod } from '@/lib/typ
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '../ui/skeleton';
 
 const modificationPeriodSchema = z.object({
   paymentDate: z.date({
@@ -76,6 +77,7 @@ type LoanFormProps = {
   onReset: () => void;
   hasResults: boolean;
   initialData: LoanData | null;
+  isClient: boolean;
 };
 
 const defaultValues = {
@@ -92,37 +94,40 @@ export default function LoanForm({
   onReset,
   hasResults,
   initialData,
+  isClient,
 }: LoanFormProps) {
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData ? undefined : defaultValues,
+    defaultValues: defaultValues,
   });
 
   useEffect(() => {
-    if (initialData) {
-      // Create a mutable copy to work with
-      const dataForForm: any = {
-        ...initialData,
-        startDate: initialData.startDate ? new Date(initialData.startDate) : new Date(),
-      };
-      
-      // When loading from localStorage, the modificationPeriods are in {startMonth, endMonth, amount} format.
-      // We need to convert them back to {paymentDate, amount} for the form.
-      if (initialData.modificationPeriods) {
-         const loanStartDate = dataForForm.startDate;
-         dataForForm.modificationPeriods = (initialData.modificationPeriods || []).map(mod => {
-            const paymentDate = addMonths(loanStartDate, mod.startMonth - 1);
-            return { paymentDate, amount: mod.amount };
-         });
-      }
+    if (isClient) {
+      if (initialData) {
+        // Create a mutable copy to work with
+        const dataForForm: any = {
+          ...initialData,
+          startDate: initialData.startDate ? new Date(initialData.startDate) : new Date(),
+        };
+        
+        // When loading from localStorage, the modificationPeriods are in {startMonth, endMonth, amount} format.
+        // We need to convert them back to {paymentDate, amount} for the form.
+        if (initialData.modificationPeriods) {
+           const loanStartDate = dataForForm.startDate;
+           dataForForm.modificationPeriods = (initialData.modificationPeriods || []).map(mod => {
+              const paymentDate = addMonths(loanStartDate, mod.startMonth - 1);
+              return { paymentDate, amount: mod.amount };
+           });
+        }
 
-      form.reset(dataForForm);
-    } else {
-      form.reset(defaultValues);
+        form.reset(dataForForm);
+      } else {
+        form.reset(defaultValues);
+      }
     }
-  }, [initialData, form]);
+  }, [initialData, form, isClient]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -167,6 +172,41 @@ export default function LoanForm({
     form.reset(defaultValues);
     onReset();
   };
+
+  if (!isClient) {
+    return (
+       <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calculator className="h-6 w-6" />
+            Amortization Calculator
+          </CardTitle>
+          <CardDescription>
+            Enter your loan details to generate an amortization schedule.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-8">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+             <Separator />
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+               <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="space-y-4">
+               <Skeleton className="h-8 w-48" />
+               <Skeleton className="h-8 w-64" />
+            </div>
+             <div className="flex justify-end">
+                <Skeleton className="h-10 w-40" />
+            </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <>
