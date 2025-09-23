@@ -376,8 +376,8 @@ export default function LoanForm({
                                   )}
                                 >
                                   <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {field.value ? (
-                                    format(new Date(field.value), 'PPP')
+                                  {field.value && field.value instanceof Date ? (
+                                    format(field.value, 'PPP')
                                   ) : (
                                     <span>Pick a date</span>
                                   )}
