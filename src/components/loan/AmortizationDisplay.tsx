@@ -12,7 +12,7 @@ import AmortizationSummary from './AmortizationSummary';
 import AmortizationTable from './AmortizationTable';
 import AmortizationCharts from './AmortizationCharts';
 import { Button } from '../ui/button';
-import { FileDown, Printer } from 'lucide-react';
+import { FileDown } from 'lucide-react';
 import Papa from 'papaparse';
 import { formatCurrency } from '@/lib/amortization';
 
@@ -25,9 +25,6 @@ export default function AmortizationDisplay({
   schedule,
   loanData,
 }: AmortizationDisplayProps) {
-  const handlePrint = () => {
-    window.print();
-  };
 
   const handleDownloadCsv = () => {
     const dataToExport = schedule.map(period => ({
@@ -62,10 +59,6 @@ export default function AmortizationDisplay({
           <Button onClick={handleDownloadCsv} variant="outline" size="sm" >
             <FileDown className="mr-2 h-4 w-4" />
             Download CSV
-          </Button>
-          <Button onClick={handlePrint} variant="outline" size="sm">
-            <Printer className="mr-2 h-4 w-4" />
-            Print Report
           </Button>
         </div>
       </CardHeader>
