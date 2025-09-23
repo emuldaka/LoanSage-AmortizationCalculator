@@ -12,7 +12,7 @@ import {
   Calendar as CalendarIcon,
 } from 'lucide-react';
 import { useState } from 'react';
-import { format } from 'date-fns';
+import { differenceInCalendarMonths, format } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -49,12 +49,9 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
 const modificationPeriodSchema = z.object({
-  startMonth: z.coerce
-    .number({ invalid_type_error: 'Must be a number' })
-    .min(1, 'Month must be at least 1'),
-  endMonth: z.coerce
-    .number({ invalid_type_error: 'Must be a number' })
-    .min(1, 'Month must be at least 1'),
+  paymentDate: z.date({
+    required_error: 'A date is required.',
+  }),
   amount: z.coerce
     .number({ invalid_type_error: 'Must be a number' })
     .min(0, 'Amount cannot be negative'),
@@ -77,16 +74,7 @@ const formSchema = z
       .min(0, 'Extra payment cannot be negative')
       .optional(),
     modificationPeriods: z.array(modificationPeriodSchema).optional(),
-  })
-  .refine(
-    (data) =>
-      !data.modificationPeriods ||
-      data.modificationPeriods.every((p) => p.endMonth >= p.startMonth),
-    {
-      message: 'End month must be greater than or equal to start month',
-      path: ['modificationPeriods'],
-    }
-  );
+  });
 
 type LoanFormProps = {
   onCalculate: (
@@ -114,6 +102,7 @@ export default function LoanForm({
       termInYears: 30,
       extraPayment: 0,
       modificationPeriods: [],
+      startDate: new Date(),
     },
   });
 
@@ -123,7 +112,19 @@ export default function LoanForm({
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    const schedule = calculateAmortizationSchedule(values);
+    const loanStartDate = values.startDate || new Date();
+    
+    const modificationPeriods: ModificationPeriod[] = (values.modificationPeriods || []).map(p => {
+        const month = differenceInCalendarMonths(p.paymentDate, loanStartDate) + 1;
+        return { startMonth: month, endMonth: month, amount: p.amount };
+    }).filter(p => p.startMonth > 0);
+
+    const loanData: LoanData = {
+      ...values,
+      modificationPeriods,
+    };
+
+    const schedule = calculateAmortizationSchedule(loanData);
     if (schedule.length > 0) {
       onCalculate(values, schedule);
       toast({
@@ -156,12 +157,18 @@ export default function LoanForm({
 
     setIsAiLoading(true);
     try {
+      const loanStartDate = values.startDate || new Date();
+      const modificationPeriods: ModificationPeriod[] = (values.modificationPeriods || []).map(p => {
+        const month = differenceInCalendarMonths(p.paymentDate, loanStartDate) + 1;
+        return { startMonth: month, endMonth: month, amount: p.amount };
+      }).filter(p => p.startMonth > 0);
+
       const result = await suggestOptimalPaymentSchedule({
         principal: values.principal,
         interestRate: values.interestRate / 100,
         loanTermMonths: values.termInYears * 12,
         extraPaymentAmount: values.extraPayment,
-        paymentModificationPeriods: values.modificationPeriods as ModificationPeriod[],
+        paymentModificationPeriods: modificationPeriods,
       });
       setAiSuggestion(result.suggestedPaymentSchedule);
     } catch (error) {
@@ -258,7 +265,7 @@ export default function LoanForm({
                   name="startDate"
                   render={({ field }) => (
                     <FormItem className="flex flex-col pt-2">
-                      <FormLabel>Loan Start Date (Optional)</FormLabel>
+                      <FormLabel>Loan Start Date</FormLabel>
                       <Popover>
                         <PopoverTrigger asChild>
                           <FormControl>
@@ -331,9 +338,9 @@ export default function LoanForm({
               </div>
 
               <div className="space-y-4">
-                <FormLabel>One-Time or Temporary Extra Payments</FormLabel>
+                <FormLabel>One-Time Extra Payments</FormLabel>
                  <FormDescription>
-                  Specify additional payments for particular periods. For a one-time payment, set the start and end month to be the same.
+                  Specify additional one-time payments.
                 </FormDescription>
                 {fields.map((field, index) => (
                   <div
@@ -342,26 +349,38 @@ export default function LoanForm({
                   >
                     <FormField
                       control={form.control}
-                      name={`modificationPeriods.${index}.startMonth`}
+                      name={`modificationPeriods.${index}.paymentDate`}
                       render={({ field }) => (
-                        <FormItem className='flex-1'>
-                          <FormLabel>Start Month</FormLabel>
-                          <FormControl>
-                            <Input type="number" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`modificationPeriods.${index}.endMonth`}
-                      render={({ field }) => (
-                        <FormItem className='flex-1'>
-                          <FormLabel>End Month</FormLabel>
-                          <FormControl>
-                            <Input type="number" {...field} />
-                          </FormControl>
+                        <FormItem className="flex-1">
+                          <FormLabel>Payment Date</FormLabel>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant={'outline'}
+                                  className={cn(
+                                    'w-full justify-start text-left font-normal',
+                                    !field.value && 'text-muted-foreground'
+                                  )}
+                                >
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {field.value ? (
+                                    format(field.value, 'PPP')
+                                  ) : (
+                                    <span>Pick a date</span>
+                                  )}
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value}
+                                onSelect={field.onChange}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -396,11 +415,11 @@ export default function LoanForm({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    append({ startMonth: 1, endMonth: 1, amount: 1000 })
+                    append({ paymentDate: new Date(), amount: 1000 })
                   }
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  Add One-Time/Temporary Payment
+                  Add One-Time Payment
                 </Button>
               </div>
 
@@ -449,5 +468,3 @@ export default function LoanForm({
     </>
   );
 }
-
-    
