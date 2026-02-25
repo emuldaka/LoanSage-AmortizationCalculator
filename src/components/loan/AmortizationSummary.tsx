@@ -27,8 +27,12 @@ export default function AmortizationSummary({
   const totalMonths = lastPayment.month;
   const originalTermMonths = loanData.termInYears * 12;
 
+  // Calculate the original monthly payment based on initial loan terms. This is the correct base payment.
+  const originalMonthlyPayment = calculateMonthlyPayment(loanData.principal, loanData.interestRate, loanData.termInYears);
+
   const summaryItems = [
-    { label: 'Regular Monthly Payment', value: formatCurrency(schedule[0].payment - schedule[0].extraPayment) },
+    // Use the calculated original monthly payment for display for consistency.
+    { label: 'Regular Monthly Payment', value: formatCurrency(originalMonthlyPayment) },
     { label: 'Total Principal', value: formatCurrency(totalPrincipal) },
     { label: 'Total Interest', value: formatCurrency(totalInterest) },
     { label: 'Total Payments', value: formatCurrency(totalPayments) },
@@ -39,12 +43,13 @@ export default function AmortizationSummary({
   let savings: { timeSaved: string; interestSaved: string; } | null = null;
   
   if (totalMonths < originalTermMonths) {
-    const originalMonthlyPayment = calculateMonthlyPayment(loanData.principal, loanData.interestRate, loanData.termInYears);
+    // Calculate total interest that would have been paid over the original term, using the correct original monthly payment.
     const originalTotalInterest = (originalMonthlyPayment * originalTermMonths) - totalPrincipal;
 
     if (originalTotalInterest > totalInterest) {
         savings = {
           timeSaved: `${originalTermMonths - totalMonths} months`,
+          // The saved interest is the difference between original total interest and the actual total interest paid.
           interestSaved: formatCurrency(originalTotalInterest - totalInterest),
       }
     }
