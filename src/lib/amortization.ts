@@ -20,31 +20,29 @@ export function calculateAmortizationSchedule({
     let totalInterest = 0;
     const schedule: AmortizationPeriod[] = [];
 
-    for (let month = 1; month <= numberOfPayments; month++) {
-      let currentExtraPayment = extraPayment;
-      const modification = modificationPeriods.find(
-        (p) => month >= p.startMonth && month <= p.endMonth
-      );
-      if (modification) {
-        currentExtraPayment += modification.amount;
-      }
+    for (let month = 1; month <= numberOfPayments * 2 && remainingBalance > 0; month++) {
+      const recurringExtra = extraPayment || 0;
+      const oneTimePaymentsForMonth = modificationPeriods
+        .filter((p) => p.startMonth === month)
+        .reduce((sum, p) => sum + p.amount, 0);
+      const currentExtraPayment = recurringExtra + oneTimePaymentsForMonth;
+      
       const totalPayment = monthlyPayment + currentExtraPayment;
+      
       const principalPaid = Math.min(totalPayment, remainingBalance);
+      const actualExtraPaid = Math.max(0, principalPaid - monthlyPayment);
+      
       remainingBalance -= principalPaid;
       
       schedule.push({
         month,
-        payment: totalPayment,
+        payment: principalPaid,
         principal: principalPaid,
         interest: 0,
         totalInterest,
         remainingBalance,
-        extraPayment: currentExtraPayment
+        extraPayment: actualExtraPaid,
       });
-
-      if (remainingBalance <= 0) {
-        break;
-      }
     }
     return schedule;
   }
@@ -57,42 +55,29 @@ export function calculateAmortizationSchedule({
   let totalInterest = 0;
   const schedule: AmortizationPeriod[] = [];
 
-  for (let month = 1; month <= numberOfPayments * 2; month++) { // Allow for longer term if payments are reduced
-    if (remainingBalance <= 0) break;
+  for (let month = 1; month <= numberOfPayments * 2; month++) { // Allow for longer term
+    if (remainingBalance <= 0.005) { // Threshold for floating point inaccuracies
+      break;
+    }
 
     const interestPaid = remainingBalance * monthlyRate;
-    let principalFromBasePayment = monthlyPayment - interestPaid;
     
-    if (remainingBalance < monthlyPayment) {
-        principalFromBasePayment = remainingBalance;
-    }
+    const recurringExtra = extraPayment || 0;
+    const oneTimePaymentsForMonth = modificationPeriods
+        .filter((p) => p.startMonth === month)
+        .reduce((sum, p) => sum + p.amount, 0);
+    const currentExtraPayment = recurringExtra + oneTimePaymentsForMonth;
 
-    let currentExtraPayment = extraPayment;
-    const modification = modificationPeriods.find(
-      (p) => month >= p.startMonth && month <= p.endMonth
-    );
-    if (modification) {
-        currentExtraPayment += modification.amount;
-    }
+    const principalFromBasePayment = monthlyPayment - interestPaid;
+    const principalToPay = principalFromBasePayment + currentExtraPayment;
     
-    const principalPaid = principalFromBasePayment + currentExtraPayment;
-    const totalPayment = interestPaid + principalPaid;
-
-    if (remainingBalance < totalPayment) {
-        schedule.push({
-            month,
-            payment: remainingBalance + interestPaid,
-            principal: remainingBalance,
-            interest: interestPaid,
-            totalInterest: totalInterest + interestPaid,
-            remainingBalance: 0,
-            extraPayment: 0,
-        });
-        break;
-    }
-
+    const principalPaid = Math.min(principalToPay, remainingBalance);
+    const totalPayment = principalPaid + interestPaid;
+    
     remainingBalance -= principalPaid;
     totalInterest += interestPaid;
+    
+    const actualExtraPaid = Math.max(0, totalPayment - monthlyPayment);
 
     schedule.push({
       month,
@@ -100,20 +85,23 @@ export function calculateAmortizationSchedule({
       principal: principalPaid,
       interest: interestPaid,
       totalInterest,
-      remainingBalance,
-      extraPayment: currentExtraPayment
+      remainingBalance: remainingBalance,
+      extraPayment: actualExtraPaid,
     });
-
-    if (remainingBalance <= 0) {
-        // Correct last payment if overpaid
-        const overpayment = Math.abs(remainingBalance);
-        const lastPeriod = schedule[schedule.length - 1];
-        lastPeriod.principal -= overpayment;
-        lastPeriod.payment -= overpayment;
-        lastPeriod.remainingBalance = 0;
-        break;
-    }
   }
+  
+  // Final cleanup for the last payment if balance is slightly off
+  if (schedule.length > 0) {
+      const lastPeriod = schedule[schedule.length - 1];
+      if (lastPeriod.remainingBalance < 0) {
+          const overpayment = lastPeriod.remainingBalance; // This will be a negative number
+          lastPeriod.principal += overpayment; // Add negative number to reduce principal
+          lastPeriod.payment += overpayment; // Add negative number to reduce payment
+          lastPeriod.extraPayment = Math.max(0, lastPeriod.extraPayment + overpayment);
+          lastPeriod.remainingBalance = 0;
+      }
+  }
+
 
   return schedule;
 }
