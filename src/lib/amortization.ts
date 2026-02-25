@@ -21,6 +21,9 @@ export function calculateAmortizationSchedule({
     const schedule: AmortizationPeriod[] = [];
 
     for (let month = 1; month <= numberOfPayments * 2 && remainingBalance > 0; month++) {
+      if (remainingBalance <= 0) {
+        break;
+      }
       const recurringExtra = extraPayment || 0;
       const oneTimePaymentsForMonth = modificationPeriods
         .filter((p) => p.startMonth === month)
@@ -56,7 +59,7 @@ export function calculateAmortizationSchedule({
   const schedule: AmortizationPeriod[] = [];
 
   for (let month = 1; month <= numberOfPayments * 2; month++) { // Allow for longer term
-    if (remainingBalance <= 0.005) { // Threshold for floating point inaccuracies
+    if (remainingBalance <= 0) { 
       break;
     }
 
