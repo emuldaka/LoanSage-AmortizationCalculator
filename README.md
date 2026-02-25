@@ -1,7 +1,3 @@
-# LoanSage Amortization Calculator
-
-This is a NextJS application built in Firebase Studio.
+This is an Amortization Calculator
 
 To get started, take a look at `src/app/page.tsx`.
-
-The application is automatically deployed to GitHub Pages on every push to the `main` branch.
