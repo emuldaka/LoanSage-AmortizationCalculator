@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatCurrency } from '@/lib/amortization';
+import { formatCurrency, calculateMonthlyPayment } from '@/lib/amortization';
 import type { AmortizationPeriod, LoanData } from '@/lib/types';
 import { addMonths, format } from 'date-fns';
 
@@ -36,13 +36,18 @@ export default function AmortizationSummary({
     { label: 'Loan Term', value: `${totalMonths} months (${(totalMonths/12).toFixed(1)} years)` },
   ];
   
-  const savings = totalMonths < originalTermMonths ? {
-      timeSaved: `${originalTermMonths - totalMonths} months`,
-      originalTotalInterest: (schedule[0].payment * originalTermMonths) - totalPrincipal,
-  } : null;
+  let savings: { timeSaved: string; interestSaved: string; } | null = null;
+  
+  if (totalMonths < originalTermMonths) {
+    const originalMonthlyPayment = calculateMonthlyPayment(loanData.principal, loanData.interestRate, loanData.termInYears);
+    const originalTotalInterest = (originalMonthlyPayment * originalTermMonths) - totalPrincipal;
 
-  if (savings) {
-    savings.interestSaved = savings.originalTotalInterest > totalInterest ? formatCurrency(savings.originalTotalInterest - totalInterest) : formatCurrency(0);
+    if (originalTotalInterest > totalInterest) {
+        savings = {
+          timeSaved: `${originalTermMonths - totalMonths} months`,
+          interestSaved: formatCurrency(originalTotalInterest - totalInterest),
+      }
+    }
   }
 
 
@@ -82,5 +87,3 @@ export default function AmortizationSummary({
     </div>
   );
 }
-
-    

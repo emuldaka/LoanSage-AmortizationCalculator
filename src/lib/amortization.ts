@@ -1,5 +1,28 @@
 import type { LoanData, AmortizationPeriod, ModificationPeriod } from './types';
 
+export function calculateMonthlyPayment(
+  principal: number,
+  interestRate: number,
+  termInYears: number
+): number {
+  if (principal <= 0 || termInYears <= 0 || interestRate < 0) {
+    return 0;
+  }
+
+  const monthlyRate = interestRate / 100 / 12;
+  const numberOfPayments = termInYears * 12;
+
+  if (monthlyRate === 0) {
+    return principal / numberOfPayments;
+  }
+
+  const payment =
+    (principal * monthlyRate * Math.pow(1 + monthlyRate, numberOfPayments)) /
+    (Math.pow(1 + monthlyRate, numberOfPayments) - 1);
+  
+  return isNaN(payment) ? 0 : payment;
+}
+
 export function calculateAmortizationSchedule({
   principal,
   interestRate,
@@ -50,9 +73,7 @@ export function calculateAmortizationSchedule({
     return schedule;
   }
 
-  const monthlyPayment =
-    (principal * monthlyRate * Math.pow(1 + monthlyRate, numberOfPayments)) /
-    (Math.pow(1 + monthlyRate, numberOfPayments) - 1);
+  const monthlyPayment = calculateMonthlyPayment(principal, interestRate, termInYears);
 
   let remainingBalance = principal;
   let totalInterest = 0;
