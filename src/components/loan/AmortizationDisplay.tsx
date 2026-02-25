@@ -27,6 +27,7 @@ export default function AmortizationDisplay({
 }: AmortizationDisplayProps) {
 
   const handleDownloadCsv = () => {
+    // We prepare the schedule data for the main part of the CSV
     const dataToExport = schedule.map(period => ({
       Month: period.month,
       Payment: formatCurrency(period.payment),
@@ -37,15 +38,19 @@ export default function AmortizationDisplay({
       'Total Interest': formatCurrency(period.totalInterest),
     }));
 
-    const csv = Papa.unparse(dataToExport);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // To allow importing back, we prepend a special metadata row containing the input parameters
+    const configMetadata = JSON.stringify(loanData);
+    const csvContent = Papa.unparse(dataToExport);
+    const finalCsv = `LOANSAGE_CONFIG,${configMetadata}\n` + csvContent;
+
+    const blob = new Blob([finalCsv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.href) {
       URL.revokeObjectURL(link.href);
     }
     const url = URL.createObjectURL(blob);
     link.href = url;
-    link.setAttribute('download', 'amortization_schedule.csv');
+    link.setAttribute('download', `loansage_report_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -58,7 +63,7 @@ export default function AmortizationDisplay({
         <div className='flex gap-2 no-print'>
           <Button onClick={handleDownloadCsv} variant="outline" size="sm" >
             <FileDown className="mr-2 h-4 w-4" />
-            Download CSV
+            Download Report
           </Button>
         </div>
       </CardHeader>

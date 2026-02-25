@@ -9,9 +9,10 @@ import {
   Trash2,
   RefreshCw,
   Calendar as CalendarIcon,
+  Upload,
 } from 'lucide-react';
-import { useEffect } from 'react';
-import { differenceInCalendarMonths, format, addMonths, isValid } from 'date-fns';
+import { useEffect, useRef } from 'react';
+import { differenceInCalendarMonths, format, isValid } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -34,7 +35,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { calculateAmortizationSchedule } from '@/lib/amortization';
-import type { AmortizationPeriod, LoanData, ModificationPeriod } from '@/lib/types';
+import type { AmortizationPeriod, LoanData } from '@/lib/types';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -97,6 +98,7 @@ export default function LoanForm({
   isClient,
 }: LoanFormProps) {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -106,16 +108,14 @@ export default function LoanForm({
   useEffect(() => {
     if (isClient) {
       if (initialData) {
-        // Create a mutable copy to work with
         const dataForForm: any = {
           ...initialData,
           startDate: initialData.startDate ? new Date(initialData.startDate) : new Date(),
            modificationPeriods: (initialData.modificationPeriods || []).map(mod => ({
             ...mod,
-            paymentDate: new Date(mod.paymentDate),
+            paymentDate: mod.paymentDate ? new Date(mod.paymentDate) : new Date(),
           })),
         };
-
         form.reset(dataForForm);
       } else {
         form.reset(defaultValues);
@@ -131,27 +131,16 @@ export default function LoanForm({
   function onSubmit(values: z.infer<typeof formSchema>) {
     const loanStartDate = values.startDate || new Date();
     
-    // This is the data that will be saved to localStorage.
     const loanDataForStorage: LoanData = {
         ...values,
         modificationPeriods: (values.modificationPeriods || []).map(p => ({
             ...p,
-            // Convert date to a format that can be stored and retrieved for calculation
             startMonth: differenceInCalendarMonths(new Date(p.paymentDate), loanStartDate) + 1,
             endMonth: differenceInCalendarMonths(new Date(p.paymentDate), loanStartDate) + 1
         }))
     };
     
-    // We only want to store the calculation-relevant parts, not the raw form date
-    const modificationPeriodsForCalc = loanDataForStorage.modificationPeriods.map(({startMonth, endMonth, amount}) => ({
-        startMonth, endMonth, amount
-    })).filter(p => p.startMonth > 0);
-
-
-    const schedule = calculateAmortizationSchedule({
-      ...loanDataForStorage,
-      modificationPeriods: modificationPeriodsForCalc
-    });
+    const schedule = calculateAmortizationSchedule(loanDataForStorage);
 
     if (schedule.length > 0) {
       onCalculate(loanDataForStorage, schedule);
@@ -163,8 +152,7 @@ export default function LoanForm({
       toast({
         variant: 'destructive',
         title: 'Calculation Error',
-        description:
-          'Could not generate schedule. Please check your inputs.',
+        description: 'Could not generate schedule. Please check your inputs.',
       });
     }
   }
@@ -172,6 +160,62 @@ export default function LoanForm({
   const handleResetForm = () => {
     form.reset(defaultValues);
     onReset();
+  };
+
+  const handleImportCsv = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      const lines = content.split('\n');
+      const firstLine = lines[0];
+
+      if (firstLine.startsWith('LOANSAGE_CONFIG,')) {
+        try {
+          const jsonString = firstLine.substring('LOANSAGE_CONFIG,'.length);
+          const importedData = JSON.parse(jsonString) as LoanData;
+          
+          // Re-hydrate the data
+          const startDate = importedData.startDate ? new Date(importedData.startDate) : new Date();
+          const modificationPeriods = (importedData.modificationPeriods || []).map(mod => ({
+            ...mod,
+            paymentDate: mod.paymentDate ? new Date(mod.paymentDate) : new Date(),
+          }));
+
+          const valuesToSet = {
+            ...importedData,
+            startDate,
+            modificationPeriods
+          };
+
+          form.reset(valuesToSet);
+          // Trigger calculation immediately
+          onSubmit(valuesToSet as any);
+
+          toast({
+            title: 'Report Imported',
+            description: 'Your loan data has been successfully restored.',
+          });
+        } catch (error) {
+          toast({
+            variant: 'destructive',
+            title: 'Import Failed',
+            description: 'Could not parse the loan data from this CSV.',
+          });
+        }
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Invalid File',
+          description: 'This CSV does not appear to be a LoanSage export.',
+        });
+      }
+    };
+    reader.readAsText(file);
+    // Clear the input so the same file can be uploaded again if needed
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   if (!isClient) {
@@ -183,7 +227,7 @@ export default function LoanForm({
             Amortization Calculator
           </CardTitle>
           <CardDescription>
-            Enter your loan details to generate an amortization schedule.
+            Enter your loan details or upload a previous report.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -213,13 +257,35 @@ export default function LoanForm({
     <>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calculator className="h-6 w-6" />
-            Amortization Calculator
-          </CardTitle>
-          <CardDescription>
-            Enter your loan details to generate an amortization schedule.
-          </CardDescription>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-6 w-6" />
+                Amortization Calculator
+              </CardTitle>
+              <CardDescription>
+                Enter details manually or import a previous session.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                accept=".csv"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleImportCsv}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Import CSV
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -297,7 +363,7 @@ export default function LoanForm({
                               )}
                             >
                               <CalendarIcon className="mr-2 h-4 w-4" />
-                              {field.value ? (
+                              {field.value && isValid(new Date(field.value)) ? (
                                 format(new Date(field.value), 'PPP')
                               ) : (
                                 <span>Pick a date</span>
@@ -308,10 +374,10 @@ export default function LoanForm({
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={field.value}
+                            selected={field.value ? new Date(field.value) : undefined}
                             onSelect={field.onChange}
                             disabled={(date) =>
-                              date > new Date() || date < new Date('1900-01-01')
+                              date > new Date('2100-01-01') || date < new Date('1900-01-01')
                             }
                             initialFocus
                           />
@@ -390,7 +456,7 @@ export default function LoanForm({
                             <PopoverContent className="w-auto p-0" align="start">
                               <Calendar
                                 mode="single"
-                                selected={field.value}
+                                selected={field.value ? new Date(field.value) : undefined}
                                 onSelect={field.onChange}
                                 initialFocus
                               />
@@ -445,12 +511,12 @@ export default function LoanForm({
                     variant="outline"
                     onClick={handleResetForm}
                   >
-                    <RefreshCw />
+                    <RefreshCw className="mr-2 h-4 w-4" />
                     Reset
                   </Button>
                 )}
                 <Button type="submit">
-                  <Calculator />
+                  <Calculator className="mr-2 h-4 w-4" />
                   Calculate Schedule
                 </Button>
               </div>
